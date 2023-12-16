@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2021"
 authors = ["John Yu <cb8866@sina.com>"]
 description = "SM9, identity-based cryptography"
-keywords = ["SM9","pairing","crypto","identity-based","cryptography", "shangmi"]
+keywords = ["SM9","pairing","crypto","cryptography","shangmi"]
 license = "MIT OR Apache-2.0"
 documentation = "https://docs.rs/sm9/"
+repository = "https://github.com/John-Yu/SM9"
 readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -17,7 +18,7 @@ der = {version ="0.7.8", features = ["alloc","pem","std"]}
 pem-rfc7468 = "0.7.0"
 sm3 = "0.4.2"
 hmac = "0.12.1"
-sm9_core = {version ="0.3.2", path = "../sm9_rs"}
+sm9_core = "0.3.2"
 hex-literal = "0.4.1"
 
 [dev-dependencies]
