@@ -191,7 +191,7 @@ impl Sm9 {
     /// veriry, difined in "SM9 identity-based cryptographic algorithms"
     /// Part 2: Digital signature algorithm
     /// 7.1 Digital signature verification algorithm
-    pub fn veriry(
+    pub fn verify(
         master_signature_public_key_file: impl AsRef<Path>,
         user_id: &[u8],
         m: &[u8],

@@ -8,7 +8,7 @@ Add the `sm9` crate to your dependencies in `Cargo.toml`...
 
 ```toml
 [dependencies]
-sm9 = "0.2.0"
+sm9 = "0.2.1"
 ```
 
 ...and add an `extern crate` declaration to your crate root:
@@ -49,7 +49,7 @@ extern crate sm9;
     );
     println!("{:02X?}", h);
     println!("{:02X?}", s);
-    assert!(Sm9::veriry("master_signature_public_key.pem", user_id, m, (h, s)));
+    assert!(Sm9::verify("master_signature_public_key.pem", user_id, m, (h, s)));
 ```
 
 ## License
