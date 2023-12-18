@@ -1,6 +1,6 @@
 [package]
 name = "sm9"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["John Yu <cb8866@sina.com>"]
 description = "SM9, identity-based cryptography"
@@ -19,7 +19,7 @@ pem-rfc7468 = "0.7.0"
 sm3 = "0.4.2"
 hmac = "0.12.1"
 sm9_core = "0.3.2"
-hex-literal = "0.4.1"
+hex-literal = "0.4"
 
 [dev-dependencies]
 hex-literal = "0.4"

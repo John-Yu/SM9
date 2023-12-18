@@ -5,14 +5,21 @@ extern crate alloc;
 
 mod key;
 
-use std::path::Path;
-use rand::prelude::*;
 use hmac::{Hmac, Mac};
+use pem_rfc7468::{LineEnding, PemLabel};
+use rand::prelude::*;
 use sm3::{Digest, Sm3};
+use std::path::Path;
 
-pub use crate::key::{EncodeKey, MasterPrivateKey, MasterPublicKey, UserPrivateKey};
-pub use pem_rfc7468::{LineEnding, PemLabel};
-pub use sm9_core::{fast_pairing, Fr, Group, Gt, G1, G2};
+use crate::key::{
+    EncodeKey, MasterPrivateKey, MasterPublicKey, MasterSignaturePublicKey, UserPrivateKey,
+    UserSignaturePrivateKey,
+};
+
+pub use sm9_core::Fr;
+
+const SM9_HID_SIGN: u8 = 1;
+const SM9_HID_ENC: u8 = 3;
 
 // Create alias for HMAC-Sm3
 type HmacSm3 = Hmac<Sm3>;
@@ -26,12 +33,19 @@ impl Sm9 {
     // Part 4: Key encapsulation mechanism and public key encryption algorithm
     // 5.4 Auxiliary functions
     // 5.4.2.2 Cryptographic function H1() : generate h1 in [1, n-1]
-    pub fn hash_1(id: &[u8], hid: u8) -> Option<Fr> {
+    pub(crate) fn hash_1(z: &[u8]) -> Option<Fr> {
+        Self::hash(1u8, z)
+    }
+    // 5.4.2.3 Cryptographic function H2() : generate h2 in [1, n-1]
+    pub(crate) fn hash_2(z: &[u8]) -> Option<Fr> {
+        Self::hash(2u8, z)
+    }
+    fn hash(num: u8, z: &[u8]) -> Option<Fr> {
         let ct = [0u8, 0, 0, 1];
-        let mut v = vec![1u8];
+        let mut v = vec![num];
         let mut ha = [0u8; 64];
-        v.extend_from_slice(id);
-        v.push(hid);
+        // Step 3.1: Compute Hai = SM3(num||Z||ct);
+        v.extend_from_slice(z);
         v.extend_from_slice(ct.as_slice());
 
         let mut sm3 = Sm3::new();
@@ -39,9 +53,10 @@ impl Sm9 {
         let ha1 = sm3.finalize();
         ha[..32].copy_from_slice(&ha1[..]);
 
-        let len = v.len();
-        // ct++
-        v[len - 1] += 1;
+        // Step 3.2: ct++
+        if let Some(last) = v.last_mut() {
+            *last += 1;
+        }
         let mut sm3 = Sm3::new();
         sm3.update(v);
         let ha2 = sm3.finalize();
@@ -59,33 +74,29 @@ impl Sm9 {
         // Step 1: Initialize a 32-bit counter 𝑐𝑡=0x00000001.
         let mut ct: u32 = 1;
         let mut u = Vec::<u8>::new();
-        let mut v;
         let mut k = Vec::<u8>::new();
         u.extend_from_slice(z);
         // Step 2:For 𝑖=1 to ⌈𝑘𝑙𝑒𝑛/𝑣⌉:
         while klen > 0 {
             // Step 2.1: Compute 𝐻𝑎𝑖=𝐻𝑣(𝑍∥𝑐𝑡);
-            v = u.clone();
+            let mut v = u.clone();
             v.extend_from_slice(ct.to_be_bytes().as_ref());
             let mut sm3 = Sm3::new();
             sm3.update(v);
             let ha2 = sm3.finalize();
+            // Step 2.2: 𝑐𝑡++;
+            ct += 1;
             // Step 3:
             let len = if klen > 32 { 32 } else { klen };
             // Step 4: Set 𝐾=𝐻𝑎1∥𝐻𝑎2∥...
             let hai = &ha2[..len];
             k.extend_from_slice(hai);
             klen -= len;
-            // Step 2.2: 𝑐𝑡++;
-            ct += 1;
         }
         Some(k)
     }
-    pub fn generate_master_private_key_to_pem(path: impl AsRef<Path>) {
-        // master encryption private key
-        let rng = &mut thread_rng();
-        let ke = Fr::random(rng);
-
+    /// generate_master_private_key_to_pem file
+    pub fn generate_master_private_key_to_pem(ke: &Fr, path: impl AsRef<Path>) {
         let binding = ke.to_slice();
         let master_private_key = MasterPrivateKey::new(&binding[..]);
 
@@ -93,6 +104,14 @@ impl Sm9 {
             .write_pem_file(path, MasterPrivateKey::PEM_LABEL, LineEnding::CRLF)
             .is_ok());
     }
+    /// generate_random_master_private_key_to_pem file
+    pub fn generate_random_master_private_key_to_pem(path: impl AsRef<Path>) {
+        // master encryption private key
+        let rng = &mut thread_rng();
+        let ke = Fr::random(rng);
+        Self::generate_master_private_key_to_pem(&ke, path);
+    }
+    /// generate_master_public_key_to_pem file
     pub fn generate_master_public_key_to_pem(
         master_private_key_file: impl AsRef<Path>,
         master_public_key_file: impl AsRef<Path>,
@@ -101,34 +120,87 @@ impl Sm9 {
             .expect("read master_private_key_file error");
         mpk.generate_master_public_key_to_pem(master_public_key_file);
     }
+    /// generate_user_private_key_to_pem file
     pub fn generate_user_private_key_to_pem(
         master_private_key_file: impl AsRef<Path>,
         user_id: &[u8],
-        hid: u8,
         user_private_key_file: impl AsRef<Path>,
     ) {
         let mpk = MasterPrivateKey::read_pem_file(master_private_key_file)
             .expect("read master_private_key_file error");
-        mpk.generate_user_private_key_to_pem(user_id, hid, user_private_key_file);
+        mpk.generate_user_private_key_to_pem(user_id, user_private_key_file);
     }
-
-    pub fn sm9_encrypt(
-        master_public_key_file: impl AsRef<Path>,
-        usr_id: &[u8],
-        txt: &[u8],
-    ) -> Vec<u8> {
+    //------------------------------------------------------------------------------
+    /// generate_master_signature_public_key_to_pem file
+    pub fn generate_master_signature_public_key_to_pem(
+        master_signature_private_key_file: impl AsRef<Path>,
+        master_signature_public_key_file: impl AsRef<Path>,
+    ) {
+        let mpk = MasterPrivateKey::read_pem_file(master_signature_private_key_file)
+            .expect("read master_private_key_file error");
+        mpk.generate_master_signature_public_key_to_pem(master_signature_public_key_file);
+    }
+    /// generate_user_signature_private_key_to_pem file
+    pub fn generate_user_signature_private_key_to_pem(
+        master_signature_private_key_file: impl AsRef<Path>,
+        user_id: &[u8],
+        user_signature_private_key_file: impl AsRef<Path>,
+    ) {
+        let mpk = MasterPrivateKey::read_pem_file(master_signature_private_key_file)
+            .expect("read master_signature_private_key_file error");
+        mpk.generate_user_signature_private_key_to_pem(user_id, user_signature_private_key_file);
+    }
+    /// encrypt, difined in "SM9 identity-based cryptographic algorithms"
+    /// Part 4: Key encapsulation mechanism and public key encryption algorithm
+    /// 7.1.1 Encryption algorithm
+    pub fn encrypt(master_public_key_file: impl AsRef<Path>, usr_id: &[u8], txt: &[u8]) -> Vec<u8> {
         let mpk = MasterPublicKey::read_pem_file(master_public_key_file)
             .expect("read master_public_key_file error");
+        assert!(mpk.is_ok());
         mpk.encrypt(usr_id, txt)
     }
-    pub fn sm9_decrypt(
+    /// decrypt, difined in "SM9 identity-based cryptographic algorithms"
+    /// Part 4: Key encapsulation mechanism and public key encryption algorithm
+    /// 7.2.1 Decryption algorithm
+    pub fn decrypt(
         user_privte_key_file: impl AsRef<Path>,
         usr_id: &[u8],
         m: Vec<u8>,
     ) -> Option<Vec<u8>> {
         let upk = UserPrivateKey::read_pem_file(user_privte_key_file)
             .expect("read user_privte_key_file error");
+        assert!(upk.is_ok());
         upk.decrypt(usr_id, m)
+    }
+    /// sign, difined in "SM9 identity-based cryptographic algorithms"
+    /// Part 2: Digital signature algorithm
+    /// 6.1 Digital signature generation algorithm
+    pub fn sign(
+        master_signature_public_key_file: impl AsRef<Path>,
+        user_signature_privte_key_file: impl AsRef<Path>,
+        m: &[u8],
+    ) -> (Vec<u8>, Vec<u8>) {
+        let uspk = UserSignaturePrivateKey::read_pem_file(user_signature_privte_key_file)
+            .expect("read UserSignaturePrivateKey error");
+        assert!(uspk.is_ok());
+        let mspk = MasterSignaturePublicKey::read_pem_file(master_signature_public_key_file)
+            .expect("MasterSignaturePublicKey read_pem_file error!");
+        assert!(mspk.is_ok());
+        uspk.sign(&mspk, m)
+    }
+    /// veriry, difined in "SM9 identity-based cryptographic algorithms"
+    /// Part 2: Digital signature algorithm
+    /// 7.1 Digital signature verification algorithm
+    pub fn veriry(
+        master_signature_public_key_file: impl AsRef<Path>,
+        user_id: &[u8],
+        m: &[u8],
+        (oh, os): (Vec<u8>, Vec<u8>),
+    ) -> bool {
+        let mspk = MasterSignaturePublicKey::read_pem_file(master_signature_public_key_file)
+            .expect("MasterSignaturePublicKey read_pem_file error!");
+        assert!(mspk.is_ok());
+        mspk.verify(user_id, m, (oh, os))
     }
 }
 
@@ -139,9 +211,12 @@ mod tests {
 
     #[test]
     fn test_hash1() {
-        let id = b"Bob";
-        let hid = 3u8;
-        let a = Sm9::hash_1(id, hid).unwrap();
+        let user_id = b"Bob";
+        let hid = SM9_HID_ENC;
+        let mut z = Vec::<u8>::new();
+        z.extend_from_slice(user_id);
+        z.push(hid);
+        let a = Sm9::hash_1(z.as_slice()).unwrap();
         let ex = hex!("9CB1F628 8CE0E510 43CE7234 4582FFC3 01E0A812 A7F5F200 4B85547A 24B82716");
         println!("{:?}", a);
         assert_eq!(a.to_slice(), ex);
@@ -171,5 +246,96 @@ mod tests {
         let d = Sm9::kdf(&r0, 32).unwrap();
         println!("{:02X?}", d);
         assert_eq!(k, d.as_slice())
+    }
+    #[test]
+    // test data follow "SM9 identity-based cryptographic algorithms"
+    // Part 5: Parameter definition
+    // Annex C: example of key encapsulation mechanism
+    fn test_bob_privte_key_from_pem() {
+        let a = UserPrivateKey::read_pem_file("bob_private_key.pem").unwrap();
+        println!("{:02X?}", a);
+        let de = a.to_g2().expect("UserPrivateKey error");
+        let b = hex!(
+            "94736ACD 2C8C8796 CC4785E9 38301A13 9A059D35 37B64141 40B2D31E ECF41683"
+            "115BAE85 F5D8BC6C 3DBD9E53 42979ACC CF3C2F4F 28420B1C B4F8C0B5 9A19B158"
+            "7AA5E475 70DA7600 CD760A0C F7BEAF71 C447F384 4753FE74 FA7BA92C A7D3B55F"
+            "27538A62 E7F7BFB5 1DCE0870 4796D94C 9D56734F 119EA447 32B50E31 CDEB75C1"
+        );
+        println!("{:02X?}", de);
+        assert_eq!(de.to_slice(), b);
+    }
+    #[test]
+    // test data follow "SM9 identity-based cryptographic algorithms"
+    // Part 5: Parameter definition
+    // Annex C: example of key encapsulation mechanism
+    fn test_master_public_key_from_pem() {
+        let a = MasterPublicKey::read_pem_file("master_public_key.pem").unwrap();
+        println!("{:02X?}", a);
+        let pube = a.to_g1().expect("MasterPublicKey error");
+        let b = hex!(
+            "787ED7B8 A51F3AB8 4E0A6600 3F32DA5C 720B17EC A7137D39 ABC66E3C 80A892FF"
+            "769DE617 91E5ADC4 B9FF85A3 1354900B 20287127 9A8C49DC 3F220F64 4C57A7B1"
+        );
+        assert_eq!(pube.to_slice(), b);
+    }
+    #[test]
+    // test data follow "SM9 identity-based cryptographic algorithms"
+    // Part 5: Parameter definition
+    // Annex C: example of key encapsulation mechanism
+    fn test_master_private_key_from_pem() {
+        let a = MasterPrivateKey::read_pem_file("master_private_key.pem")
+            .expect("MasterPrivateKey read_pem_file error!");
+        println!("{:02X?}", a);
+        assert_eq!(
+            a.as_slice(),
+            &hex!("0001EDEE 3778F441 F8DEA3D9 FA0ACC4E 07EE36C9 3F9A0861 8AF4AD85 CEDE1C22")
+        )
+    }
+    #[test]
+    // test data follow "SM9 identity-based cryptographic algorithms"
+    // Part 5: Parameter definition
+    // Annex A: Example of digital signature algorithm
+    fn test_master_signature_private_key() {
+        let a = MasterPrivateKey::read_pem_file("master_signature_private_key.pem")
+            .expect("MasterPrivateKey read_pem_file error!");
+        println!("{:02X?}", a);
+        assert_eq!(
+            a.as_slice(),
+            &hex!("000130E7 8459D785 45CB54C5 87E02CF4 80CE0B66 340F319F 348A1D5B 1F2DC5F4")
+        )
+    }
+    #[test]
+    // test data follow "SM9 identity-based cryptographic algorithms"
+    // Part 5: Parameter definition
+    // Annex A: Example of digital signature algorithm
+    fn test_master_signature_public_key() {
+        let a = MasterSignaturePublicKey::read_pem_file("master_signature_public_key.pem")
+            .expect("MasterSignaturePublicKey read_pem_file error!");
+        println!("{:02X?}", a);
+        let pub_s = a.to_g2().expect("MasterSignaturePublicKey error");
+        let b = hex!(
+            "9F64080B 3084F733 E48AFF4B 41B56501 1CE0711C 5E392CFB 0AB1B679 1B94C408"
+            "29DBA116 152D1F78 6CE843ED 24A3B573 414D2177 386A92DD 8F14D656 96EA5E32"
+            "69850938 ABEA0112 B57329F4 47E3A0CB AD3E2FDB 1A77F335 E89E1408 D0EF1C25"
+            "41E00A53 DDA532DA 1A7CE027 B7A46F74 1006E85F 5CDFF073 0E75C05F B4E3216D"
+        );
+        println!("{:02X?}", pub_s);
+        assert_eq!(pub_s.to_slice(), b);
+    }
+    #[test]
+    // test data follow "SM9 identity-based cryptographic algorithms"
+    // Part 5: Parameter definition
+    // Annex A: Example of digital signature algorithm
+    fn test_alice_signature_private_key() {
+        let a = UserSignaturePrivateKey::read_pem_file("alice_signature_private_key.pem")
+            .expect("UserSignaturePrivateKey read_pem_file error!");
+        println!("{:02X?}", a);
+        let pub_s = a.to_g1().expect("UserSignaturePrivateKey error");
+        let b = hex!(
+            "A5702F05 CF131530 5E2D6EB6 4B0DEB92 3DB1A0BC F0CAFF90 523AC875 4AA69820"
+            "78559A84 4411F982 5C109F5E E3F52D72 0DD01785 392A727B B1556952 B2B013D3"
+        );
+        println!("{:02X?}", pub_s);
+        assert_eq!(pub_s.to_slice(), b);
     }
 }

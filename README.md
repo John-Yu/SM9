@@ -8,7 +8,7 @@ Add the `sm9` crate to your dependencies in `Cargo.toml`...
 
 ```toml
 [dependencies]
-sm9 = "0.1.0"
+sm9 = "0.2.0"
 ```
 
 ...and add an `extern crate` declaration to your crate root:
@@ -26,13 +26,30 @@ extern crate sm9;
     
     let usr_id = b"Bob";
     let txt = b"Chinese IBE standard";
-    let m = Sm9::sm9_encrypt("master_public_key.pem", usr_id, txt);
+    let m = Sm9::encrypt("master_public_key.pem", usr_id, txt);
     println!("{:02X?}", m);
 
-    let msg = Sm9::sm9_decrypt("bob_private_key.pem", usr_id, m).expect("decrypt error");
+    let msg = Sm9::decrypt("bob_private_key.pem", usr_id, m).expect("decrypt error");
     println!("{:02X?}", msg);
     assert_eq!(msg.len(), txt.len());
     assert_eq!(txt, msg.as_slice());
+```
+
+(See `signature.rs` for the full example.)
+
+```rust
+    use sm9::*;
+    
+    let m = b"Chinese IBS standard";
+    let user_id = b"Alice";
+    let (h, s) = Sm9::sign(
+        "master_signature_public_key.pem",
+        "alice_signature_private_key.pem",
+        m,
+    );
+    println!("{:02X?}", h);
+    println!("{:02X?}", s);
+    assert!(Sm9::veriry("master_signature_public_key.pem", user_id, m, (h, s)));
 ```
 
 ## License
