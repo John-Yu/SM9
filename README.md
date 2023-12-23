@@ -4,17 +4,11 @@ Pure Rust implementation of the [SM9](https://en.wikipedia.org/wiki/SM9_(cryptog
 
 ## Usage
 
-Add the `sm9` crate to your dependencies in `Cargo.toml`...
+Add the `sm9` crate to your dependencies in `Cargo.toml`
 
 ```toml
 [dependencies]
-sm9 = "0.2.1"
-```
-
-...and add an `extern crate` declaration to your crate root:
-
-```rust
-extern crate sm9;
+sm9 = "0.2.2"
 ```
 
 ### Examples
@@ -42,14 +36,20 @@ extern crate sm9;
     
     let m = b"Chinese IBS standard";
     let user_id = b"Alice";
-    let (h, s) = Sm9::sign(
+    let sig = Sm9::sign(
         "master_signature_public_key.pem",
         "alice_signature_private_key.pem",
         m,
     );
-    println!("{:02X?}", h);
-    println!("{:02X?}", s);
-    assert!(Sm9::verify("master_signature_public_key.pem", user_id, m, (h, s)));
+    println!("{:02X?}", sig.h_as_ref());
+    println!("{:02X?}", sig.s_as_ref());
+
+    assert!(Sm9::verify(
+        "master_signature_public_key.pem",
+        user_id,
+        m,
+        &sig
+    ));
 ```
 
 ## License

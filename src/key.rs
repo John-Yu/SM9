@@ -1,14 +1,21 @@
 // use hex_literal::hex;
+use sec1::{
+    consts::U32,
+    der::{
+        self,
+        asn1::OctetStringRef,
+        pem::{LineEnding, PemLabel},
+        Decode, DecodeValue, Document, Encode, EncodeValue, Error, Header, Length, Reader, Result,
+        Sequence, Writer,
+    },
+};
+use sm9_core::{fast_pairing, Group, G1, G2};
 use std::path::Path;
 
-use der::{
-    asn1::OctetStringRef, Decode, DecodeValue, Document, Encode, EncodeValue, Error, Header,
-    Length, Reader, Result, Sequence, Writer,
-};
-use pem_rfc7468::{LineEnding, PemLabel};
-use sm9_core::{fast_pairing, Fr, Group, G1, G2};
-
 use crate::*;
+
+/// SEC1 encoded point for G1
+pub type EncodedPoint = sec1::EncodedPoint<U32>;
 
 macro_rules! key_impl {
     ($name:ident) => {
@@ -53,7 +60,6 @@ impl<'a> DecodeValue<'a> for PrivateKey<'a> {
             if u8::decode(reader)? != VERSION {
                 return Err(der::Tag::Integer.value_error());
             }
-
             let private_key = OctetStringRef::decode(reader)?.as_bytes();
 
             Ok(PrivateKey { private_key })
@@ -122,12 +128,12 @@ impl PemLabel for MasterPrivateKey {
 impl MasterPrivateKey {
     pub(crate) fn generate_master_public_key_to_pem(&self, path: impl AsRef<Path>) {
         // master encryption private key
-        let ke = Fr::from_slice(self.as_slice()).unwrap();
+        let ke = Fn::from_slice(self.as_slice()).unwrap();
         // master encryption public key 𝑃𝑝𝑢𝑏−𝑒
         let pub_e = G1::one() * ke;
 
         let a = pub_e.to_compressed();
-        let user_key = MasterPublicKey::new(&a[..]);
+        let user_key = MasterPublicKey::new(a.as_ref());
 
         assert!(user_key
             .write_pem_file(path, MasterPublicKey::PEM_LABEL, LineEnding::CRLF)
@@ -135,7 +141,7 @@ impl MasterPrivateKey {
     }
     pub(crate) fn generate_user_private_key_to_pem(&self, user_id: &[u8], path: impl AsRef<Path>) {
         // master encryption private key
-        let ke = Fr::from_slice(self.as_slice()).unwrap();
+        let ke = Fn::from_slice(self.as_slice()).unwrap();
         let mut z = Vec::<u8>::new();
         z.extend_from_slice(user_id);
         z.push(SM9_HID_ENC);
@@ -145,7 +151,7 @@ impl MasterPrivateKey {
         // encryption private key of the user
         let de = G2::one() * t2;
         let a = de.to_compressed();
-        let user_key = UserPrivateKey::new(&a[..]);
+        let user_key = UserPrivateKey::new(a.as_ref());
         assert!(user_key
             .write_pem_file(path, UserPrivateKey::PEM_LABEL, LineEnding::CRLF)
             .is_ok());
@@ -153,12 +159,12 @@ impl MasterPrivateKey {
     // 5.3 Generation of the signature master key and the user's signature private key
     pub(crate) fn generate_master_signature_public_key_to_pem(&self, path: impl AsRef<Path>) {
         // master signature private key
-        let ks = Fr::from_slice(self.as_slice()).unwrap();
+        let ks = Fn::from_slice(self.as_slice()).unwrap();
         // master signature public key Ppub_s
         let pub_s = G2::one() * ks;
 
         let a = pub_s.to_compressed();
-        let key = MasterSignaturePublicKey::new(&a[..]);
+        let key = MasterSignaturePublicKey::new(a.as_ref());
 
         assert!(key
             .write_pem_file(path, MasterSignaturePublicKey::PEM_LABEL, LineEnding::CRLF)
@@ -171,7 +177,7 @@ impl MasterPrivateKey {
         path: impl AsRef<Path>,
     ) {
         // master signature private key
-        let ks = Fr::from_slice(self.as_slice()).unwrap();
+        let ks = Fn::from_slice(self.as_slice()).unwrap();
         let mut z = Vec::<u8>::new();
         z.extend_from_slice(user_id);
         z.push(SM9_HID_SIGN);
@@ -181,7 +187,7 @@ impl MasterPrivateKey {
         // signature private key of the user
         let ds = G1::one() * t2;
         let a = ds.to_compressed();
-        let user_key = UserSignaturePrivateKey::new(&a[..]);
+        let user_key = UserSignaturePrivateKey::new(a.as_ref());
         assert!(user_key
             .write_pem_file(path, UserSignaturePrivateKey::PEM_LABEL, LineEnding::CRLF)
             .is_ok());
@@ -203,6 +209,7 @@ impl MasterPublicKey {
         match b.len() {
             33 => G1::from_compressed(b).ok(),
             64 => G1::from_slice(b).ok(),
+            65 => G1::from_uncompressed(b).ok(),
             _ => None,
         }
     }
@@ -226,11 +233,11 @@ impl MasterPublicKey {
         let rng = &mut thread_rng();
         loop {
             // A2: rand r in [1, N-1]
-            let r = Fr::random(rng);
+            let r = Fn::random(rng);
             // just for test
-            // let r = Fr::from_slice(&hex!("0000AAC0 541779C8 FC45E3E2 CB25C12B 5D2576B2 129AE8BB 5EE2CBE5 EC9E785C")).unwrap();
+            // let r = Fn::from_slice(&hex!("0000AAC0 541779C8 FC45E3E2 CB25C12B 5D2576B2 129AE8BB 5EE2CBE5 EC9E785C")).unwrap();
             // A3: C1 = r * Q
-            c = q * r;
+            c = r * q;
             // A5: w = g^r
             let w = g.pow(r);
             // A6: K = KDF(C || w || ID_B, klen), if K == 0, goto A2
@@ -298,6 +305,7 @@ impl UserPrivateKey {
         match b.len() {
             65 => G2::from_compressed(b).ok(),
             128 => G2::from_slice(b).ok(),
+            129 => G2::from_uncompressed(b).ok(),
             _ => None,
         }
     }
@@ -367,6 +375,7 @@ impl MasterSignaturePublicKey {
         match b.len() {
             65 => G2::from_compressed(b).ok(),
             128 => G2::from_slice(b).ok(),
+            129 => G2::from_uncompressed(b).ok(),
             _ => None,
         }
     }
@@ -375,9 +384,15 @@ impl MasterSignaturePublicKey {
     // 7.1 Digital signature verification algorithm
     pub(crate) fn verify(&self, usr_id: &[u8], m: &[u8], (oh, os): (Vec<u8>, Vec<u8>)) -> bool {
         // B1: Convert the data type of ℎ to an integer
-        let h = Fr::from_slice(oh.as_slice()).expect("signature h error");
+        let h = Fn::from_slice(oh.as_slice()).expect("signature h error");
+        // deal with both compress and uncompress form
+        let ep = EncodedPoint::from_bytes(os.as_slice()).expect("signature s error");
+        let ep_compressed = ep.compress();
         // B2: Convert the data type of 𝑆′ to a point on the elliptic curve
-        let s = G1::from_slice(os.as_slice()).expect("signature s error");
+        // let s = G1::from_uncompressed(os.as_slice()).expect("signature s error");
+        let s = G1::from_compressed(ep_compressed.as_bytes()).expect("signature s error");
+        // Case 1: Direct conversion. 6.2.8 in GM/T 0044.1‒2016
+        // let s = G1::from_slice(os.as_slice()).expect("signature s error");
         // B3: Compute the element 𝑔=𝑒(𝑃1,𝑃𝑝𝑢𝑏−𝑠)
         let pub_s = self.to_g2().expect("MasterSignaturePublicKey error");
         let g = fast_pairing(G1::one(), pub_s);
@@ -418,6 +433,7 @@ impl UserSignaturePrivateKey {
         match b.len() {
             33 => G1::from_compressed(b).ok(),
             64 => G1::from_slice(b).ok(),
+            65 => G1::from_uncompressed(b).ok(),
             _ => None,
         }
     }
@@ -433,9 +449,9 @@ impl UserSignaturePrivateKey {
         let mut l;
         loop {
             // A2: Generate a random integer r in [1, N-1]
-            let r = Fr::random(rng);
+            let r = Fn::random(rng);
             // just for test
-            //let r = Fr::from_slice(&hex!("00033C86 16B06704 813203DF D0096502 2ED15975 C662337A ED648835 DC4B1CBE")).unwrap();
+            //let r = Fn::from_slice(&hex!("00033C86 16B06704 813203DF D0096502 2ED15975 C662337A ED648835 DC4B1CBE")).unwrap();
             // A3: Compute the element w = g^r
             let w = g.pow(r);
             // A4: Compute the integer ℎ=𝐻2(𝑀||𝑤,𝑁);
@@ -456,9 +472,10 @@ impl UserSignaturePrivateKey {
         let mut oh = Vec::<u8>::new();
         let mut os = Vec::<u8>::new();
         oh.extend_from_slice(h.to_slice().as_ref());
-        // os.push(4); //6.2.8 in GM/T 0044.1‒2016, uncompressed form
+        //6.2.8 in GM/T 0044.1‒2016, uncompressed form
+        os.extend_from_slice(s.to_uncompressed().as_ref());
         // Case 1: Direct conversion. //6.2.8 in GM/T 0044.1‒2016
-        os.extend_from_slice(s.to_slice().as_ref());
+        // os.extend_from_slice(s.to_slice().as_ref());
 
         (oh, os)
     }

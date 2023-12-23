@@ -1,6 +1,6 @@
 [package]
 name = "sm9"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 authors = ["John Yu <cb8866@sina.com>"]
 description = "SM9, identity-based cryptography"
@@ -14,11 +14,11 @@ readme = "README.md"
 
 [dependencies]
 rand = { version = "0.8.5" }
-der = {version ="0.7.8", features = ["alloc","pem","std"]}
-pem-rfc7468 = "0.7.0"
+sec1 = {version = "0.7.3", features = ["alloc","pem","std"]}
 sm3 = "0.4.2"
 hmac = "0.12.1"
-sm9_core = "0.3.2"
+signature = "2.2.0"
+sm9_core = "0.3.4"
 hex-literal = "0.4"
 
 [dev-dependencies]

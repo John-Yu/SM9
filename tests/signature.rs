@@ -6,17 +6,18 @@ use sm9::*;
 fn test_signature_verify() {
     let m = b"Chinese IBS standard";
     let user_id = b"Alice";
-    let (h, s) = Sm9::sign(
+    let sig = Sm9::sign(
         "master_signature_public_key.pem",
         "alice_signature_private_key.pem",
         m,
     );
-    println!("{:02X?}", h);
-    println!("{:02X?}", s);
+    println!("{:02X?}", sig.h_as_ref());
+    println!("{:02X?}", sig.s_as_ref());
+
     assert!(Sm9::verify(
         "master_signature_public_key.pem",
         user_id,
         m,
-        (h, s)
+        &sig
     ));
 }

@@ -1,22 +1,26 @@
 #![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 
-extern crate alloc;
-
 mod key;
+mod signing;
+mod verifying;
 
 use hmac::{Hmac, Mac};
-use pem_rfc7468::{LineEnding, PemLabel};
 use rand::prelude::*;
+use sec1::der::pem::{LineEnding, PemLabel};
+use signature::{Signer, Verifier};
 use sm3::{Digest, Sm3};
 use std::path::Path;
 
-use crate::key::{
+use key::{
     EncodeKey, MasterPrivateKey, MasterPublicKey, MasterSignaturePublicKey, UserPrivateKey,
     UserSignaturePrivateKey,
 };
-
-pub use sm9_core::Fr;
+use signing::SigningKey;
+/// Fn is a prime field with n elements
+/// where n is the order of the cyclic groups 𝔾1, 𝔾2 and 𝔾t
+pub use sm9_core::Fr as Fn;
+use verifying::VerifyingKey;
 
 const SM9_HID_SIGN: u8 = 1;
 const SM9_HID_ENC: u8 = 3;
@@ -24,8 +28,36 @@ const SM9_HID_ENC: u8 = 3;
 // Create alias for HMAC-Sm3
 type HmacSm3 = Hmac<Sm3>;
 
+#[derive(Copy, Clone, Eq, PartialEq)]
+/// SM9 Signature.
+pub struct Signature(
+    // (h, s)
+    pub(crate) [u8; 32 + 65],
+);
+impl Signature {
+    pub fn new(h: &[u8], s: &[u8]) -> Option<Signature> {
+        if h.len() != 32 || s.len() != 65 {
+            None
+        } else {
+            let mut sig = Signature([0u8; 32 + 65]);
+            sig.0[..32].copy_from_slice(h);
+            sig.0[32..].copy_from_slice(s);
+            Some(sig)
+        }
+    }
+    pub fn h_as_ref(&self) -> &[u8] {
+        self.0[..32].as_ref()
+    }
+    pub fn s_as_ref(&self) -> &[u8] {
+        self.0[32..].as_ref()
+    }
+}
+impl AsRef<[u8]> for Signature {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
 /// SM9 identity-based cryptographic
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 pub struct Sm9;
 
 impl Sm9 {
@@ -33,14 +65,14 @@ impl Sm9 {
     // Part 4: Key encapsulation mechanism and public key encryption algorithm
     // 5.4 Auxiliary functions
     // 5.4.2.2 Cryptographic function H1() : generate h1 in [1, n-1]
-    pub(crate) fn hash_1(z: &[u8]) -> Option<Fr> {
+    pub(crate) fn hash_1(z: &[u8]) -> Option<Fn> {
         Self::hash(1u8, z)
     }
     // 5.4.2.3 Cryptographic function H2() : generate h2 in [1, n-1]
-    pub(crate) fn hash_2(z: &[u8]) -> Option<Fr> {
+    pub(crate) fn hash_2(z: &[u8]) -> Option<Fn> {
         Self::hash(2u8, z)
     }
-    fn hash(num: u8, z: &[u8]) -> Option<Fr> {
+    fn hash(num: u8, z: &[u8]) -> Option<Fn> {
         let ct = [0u8, 0, 0, 1];
         let mut v = vec![num];
         let mut ha = [0u8; 64];
@@ -51,7 +83,7 @@ impl Sm9 {
         let mut sm3 = Sm3::new();
         sm3.update(v.clone());
         let ha1 = sm3.finalize();
-        ha[..32].copy_from_slice(&ha1[..]);
+        ha[..32].copy_from_slice(ha1.as_slice());
 
         // Step 3.2: ct++
         if let Some(last) = v.last_mut() {
@@ -60,9 +92,9 @@ impl Sm9 {
         let mut sm3 = Sm3::new();
         sm3.update(v);
         let ha2 = sm3.finalize();
-        ha[32..].copy_from_slice(&ha2[..]);
+        ha[32..].copy_from_slice(ha2.as_slice());
 
-        Fr::from_hash(&ha[..40])
+        Fn::from_hash(&ha[..40])
     }
     // SM9 identity-based cryptographic algorithms
     // Part 3: Key exchange protocol
@@ -96,9 +128,9 @@ impl Sm9 {
         Some(k)
     }
     /// generate_master_private_key_to_pem file
-    pub fn generate_master_private_key_to_pem(ke: &Fr, path: impl AsRef<Path>) {
+    pub fn generate_master_private_key_to_pem(ke: &Fn, path: impl AsRef<Path>) {
         let binding = ke.to_slice();
-        let master_private_key = MasterPrivateKey::new(&binding[..]);
+        let master_private_key = MasterPrivateKey::new(binding.as_ref());
 
         assert!(master_private_key
             .write_pem_file(path, MasterPrivateKey::PEM_LABEL, LineEnding::CRLF)
@@ -108,7 +140,7 @@ impl Sm9 {
     pub fn generate_random_master_private_key_to_pem(path: impl AsRef<Path>) {
         // master encryption private key
         let rng = &mut thread_rng();
-        let ke = Fr::random(rng);
+        let ke = Fn::random(rng);
         Self::generate_master_private_key_to_pem(&ke, path);
     }
     /// generate_master_public_key_to_pem file
@@ -179,28 +211,30 @@ impl Sm9 {
         master_signature_public_key_file: impl AsRef<Path>,
         user_signature_privte_key_file: impl AsRef<Path>,
         m: &[u8],
-    ) -> (Vec<u8>, Vec<u8>) {
+    ) -> Signature {
         let uspk = UserSignaturePrivateKey::read_pem_file(user_signature_privte_key_file)
             .expect("read UserSignaturePrivateKey error");
         assert!(uspk.is_ok());
         let mspk = MasterSignaturePublicKey::read_pem_file(master_signature_public_key_file)
             .expect("MasterSignaturePublicKey read_pem_file error!");
         assert!(mspk.is_ok());
-        uspk.sign(&mspk, m)
+        let sign_key = SigningKey::new(&uspk, &mspk).unwrap();
+        sign_key.sign(m)
     }
-    /// veriry, difined in "SM9 identity-based cryptographic algorithms"
+    /// verify, difined in "SM9 identity-based cryptographic algorithms"
     /// Part 2: Digital signature algorithm
     /// 7.1 Digital signature verification algorithm
     pub fn verify(
         master_signature_public_key_file: impl AsRef<Path>,
         user_id: &[u8],
         m: &[u8],
-        (oh, os): (Vec<u8>, Vec<u8>),
+        sig: &Signature,
     ) -> bool {
         let mspk = MasterSignaturePublicKey::read_pem_file(master_signature_public_key_file)
             .expect("MasterSignaturePublicKey read_pem_file error!");
         assert!(mspk.is_ok());
-        mspk.verify(user_id, m, (oh, os))
+        let verify_key = VerifyingKey::new(user_id, &mspk).unwrap();
+        verify_key.verify(m, sig).is_ok()
     }
 }
 

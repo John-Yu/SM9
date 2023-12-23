@@ -8,7 +8,7 @@ use sm9::*;
 // Annex C: example of key encapsulation mechanism
 fn generate_master_private_key_to_pem() {
     // master encryption private key
-    let ke = Fr::from_slice(&hex!(
+    let ke = Fn::from_slice(&hex!(
         "0001EDEE 3778F441 F8DEA3D9 FA0ACC4E 07EE36C9 3F9A0861 8AF4AD85 CEDE1C22"
     ))
     .unwrap();
@@ -38,7 +38,7 @@ fn generate_bob_privte_key_to_pem() {
 // Annex A: Example of digital signature algorithm
 fn generate_master_signature_private_key_to_pem() {
     // master signature private key
-    let ke = Fr::from_slice(&hex!(
+    let ke = Fn::from_slice(&hex!(
         "000130E7 8459D785 45CB54C5 87E02CF4 80CE0B66 340F319F 348A1D5B 1F2DC5F4"
     ))
     .unwrap();
