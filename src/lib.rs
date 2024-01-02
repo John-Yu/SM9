@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 
+mod encapsulating;
 mod key;
 mod signing;
 mod verifying;
@@ -12,15 +13,16 @@ use signature::{Signer, Verifier};
 use sm3::{Digest, Sm3};
 use std::path::Path;
 
-use key::{
-    EncodeKey, MasterPrivateKey, MasterPublicKey, MasterSignaturePublicKey, UserPrivateKey,
-    UserSignaturePrivateKey,
-};
-use signing::SigningKey;
+use crate::key::{MasterPrivateKey, MasterSignaturePublicKey, UserSignaturePrivateKey};
+use crate::signing::SigningKey;
+use crate::verifying::VerifyingKey;
+
+pub use crate::encapsulating::Sm9EncappedKey;
+pub use crate::key::{EncodeKey, MasterPublicKey, UserPrivateKey};
+pub use kem::{Decapsulator, EncappedKey, Encapsulator};
 /// Fn is a prime field with n elements
 /// where n is the order of the cyclic groups 𝔾1, 𝔾2 and 𝔾t
 pub use sm9_core::Fr as Fn;
-use verifying::VerifyingKey;
 
 const SM9_HID_SIGN: u8 = 1;
 const SM9_HID_ENC: u8 = 3;
@@ -240,8 +242,12 @@ impl Sm9 {
 
 #[cfg(test)]
 mod tests {
+    use crate::encapsulating::Sm9EncappedKey;
+
     use super::*;
     use hex_literal::hex;
+    use kem::{Decapsulator, EncappedKey, Encapsulator};
+    use rand::rngs::OsRng;
 
     #[test]
     fn test_hash1() {
@@ -371,5 +377,32 @@ mod tests {
         );
         println!("{:02X?}", pub_s);
         assert_eq!(pub_s.to_slice(), b);
+    }
+    #[test]
+    fn test_encapsulate_key() {
+        let encapper = MasterPublicKey::read_pem_file("master_public_key.pem")
+            .expect("read master_public_key_file error");
+        let mut pk_recip: <Sm9EncappedKey as EncappedKey>::RecipientPublicKey = [0u8; 128].into();
+        let usr_id = b"Bob";
+        pk_recip[..3].copy_from_slice(usr_id);
+        let mut rng = OsRng;
+        let (ek, ss1) = encapper.try_encap(&mut rng, &pk_recip).unwrap();
+        println!("Sm9EncappedKey:{:02X?}", ek.as_ref());
+        println!("Sm9SharedSecret:{:02X?}", ss1.as_bytes());
+        let mut z = Vec::<u8>::new();
+        z.extend_from_slice(ek.as_ref());
+        z.extend_from_slice(ss1.as_bytes());
+        z.extend_from_slice(usr_id);
+        let klen = 64;
+        let _k1 = Sm9::kdf(z.as_ref(), klen).expect("klen maybe error");
+        let (_k2, _) = encapper.key_encapsulation(usr_id, klen);
+        // if both use same random for test, then they should be equal
+        //assert_eq!(_k1, _k2);
+        let upk = UserPrivateKey::read_pem_file("bob_private_key.pem")
+            .expect("read user_privte_key_file error");
+        assert!(upk.is_ok());
+        let ss2 = upk.try_decap(&ek).unwrap();
+        // the SharedSecret should be equal
+        assert_eq!(ss1.as_bytes(), ss2.as_bytes());
     }
 }

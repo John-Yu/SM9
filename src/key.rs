@@ -1,4 +1,4 @@
-// use hex_literal::hex;
+//use hex_literal::hex;
 use sec1::{
     consts::U32,
     der::{
@@ -235,7 +235,7 @@ impl MasterPublicKey {
             // A2: rand r in [1, N-1]
             let r = Fn::random(rng);
             // just for test
-            // let r = Fn::from_slice(&hex!("0000AAC0 541779C8 FC45E3E2 CB25C12B 5D2576B2 129AE8BB 5EE2CBE5 EC9E785C")).unwrap();
+            //let r = Fn::from_slice(&hex!("0000AAC0 541779C8 FC45E3E2 CB25C12B 5D2576B2 129AE8BB 5EE2CBE5 EC9E785C")).unwrap();
             // A3: C1 = r * Q
             c = r * q;
             // A5: w = g^r
@@ -247,14 +247,7 @@ impl MasterPublicKey {
             z.extend_from_slice(usr_id);
 
             k = Sm9::kdf(z.as_ref(), klen).expect("klen maybe error");
-            let mut not_zero = false;
-            for b in k.as_slice() {
-                if *b != 0 {
-                    not_zero = true;
-                    break; // break for
-                }
-            }
-            if not_zero {
+            if !k.iter().all(|&e| e == 0) {
                 break; // break loop
             }
         }

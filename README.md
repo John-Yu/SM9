@@ -8,7 +8,7 @@ Add the `sm9` crate to your dependencies in `Cargo.toml`
 
 ```toml
 [dependencies]
-sm9 = "0.2.2"
+sm9 = "0.2.3"
 ```
 
 ### Examples
