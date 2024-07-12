@@ -43,6 +43,13 @@ macro_rules! key_impl {
                 let key: PrivateKey = doc.decode_msg()?;
                 Ok(Self::new(key.private_key))
             }
+            fn from_pem(pem: &str) -> Result<Self> {
+                let (label, doc) =
+                    Document::from_pem(pem).map(|(label, doc)| (label.to_owned(), doc))?;
+                Self::validate_pem_label(&label)?;
+                let key: PrivateKey = doc.decode_msg()?;
+                Ok(Self::new(key.private_key))
+            }
         }
     };
 }
@@ -117,6 +124,8 @@ pub trait EncodeKey: Sized {
     fn to_key_der(&self) -> Result<Document>;
     /// Read key from given path
     fn read_pem_file(path: impl AsRef<Path>) -> Result<Self>;
+    /// Read key from PEM
+    fn from_pem(pem: &str) -> Result<Self>;
 }
 
 // SM9 master private key.

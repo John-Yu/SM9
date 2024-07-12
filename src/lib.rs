@@ -223,6 +223,21 @@ impl Sm9 {
         let sign_key = SigningKey::new(&uspk, &mspk).unwrap();
         sign_key.sign(m)
     }
+    // issues#1, use the content of a pem file as  parameter
+    pub fn sign2(
+        master_signature_public_key_pem: &str,
+        user_signature_privte_key_pem: &str,
+        m: &[u8],
+    ) -> Signature {
+        let uspk = UserSignaturePrivateKey::from_pem(user_signature_privte_key_pem)
+            .expect("read UserSignaturePrivateKey error");
+        assert!(uspk.is_ok());
+        let mspk = MasterSignaturePublicKey::from_pem(master_signature_public_key_pem)
+            .expect("MasterSignaturePublicKey from_pem error!");
+        assert!(mspk.is_ok());
+        let sign_key = SigningKey::new(&uspk, &mspk).unwrap();
+        sign_key.sign(m)
+    }
     /// verify, difined in "SM9 identity-based cryptographic algorithms"
     /// Part 2: Digital signature algorithm
     /// 7.1 Digital signature verification algorithm
@@ -234,6 +249,19 @@ impl Sm9 {
     ) -> bool {
         let mspk = MasterSignaturePublicKey::read_pem_file(master_signature_public_key_file)
             .expect("MasterSignaturePublicKey read_pem_file error!");
+        assert!(mspk.is_ok());
+        let verify_key = VerifyingKey::new(user_id, &mspk).unwrap();
+        verify_key.verify(m, sig).is_ok()
+    }
+    // issues#1, use the content of a pem file as  parameter
+    pub fn verify2(
+        master_signature_public_key_pem: &str,
+        user_id: &[u8],
+        m: &[u8],
+        sig: &Signature,
+    ) -> bool {
+        let mspk = MasterSignaturePublicKey::from_pem(master_signature_public_key_pem)
+            .expect("MasterSignaturePublicKey from_pem error!");
         assert!(mspk.is_ok());
         let verify_key = VerifyingKey::new(user_id, &mspk).unwrap();
         verify_key.verify(m, sig).is_ok()
