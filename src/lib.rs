@@ -193,6 +193,13 @@ impl Sm9 {
         assert!(mpk.is_ok());
         mpk.encrypt(usr_id, txt)
     }
+    // issues#1, use the content of a pem file as  parameter
+    pub fn encrypt2(master_public_key_pem: &str, usr_id: &[u8], txt: &[u8]) -> Vec<u8> {
+        let mpk = MasterPublicKey::from_pem(master_public_key_pem)
+            .expect("from_pem master_public_key_pem error");
+        assert!(mpk.is_ok());
+        mpk.encrypt(usr_id, txt)
+    }
     /// decrypt, difined in "SM9 identity-based cryptographic algorithms"
     /// Part 4: Key encapsulation mechanism and public key encryption algorithm
     /// 7.2.1 Decryption algorithm
@@ -203,6 +210,13 @@ impl Sm9 {
     ) -> Option<Vec<u8>> {
         let upk = UserPrivateKey::read_pem_file(user_privte_key_file)
             .expect("read user_privte_key_file error");
+        assert!(upk.is_ok());
+        upk.decrypt(usr_id, m)
+    }
+    // issues#1, use the content of a pem file as  parameter
+    pub fn decrypt2(user_privte_key_pem: &str, usr_id: &[u8], m: Vec<u8>) -> Option<Vec<u8>> {
+        let upk = UserPrivateKey::from_pem(user_privte_key_pem)
+            .expect("from_pem user_privte_key_pem error");
         assert!(upk.is_ok());
         upk.decrypt(usr_id, m)
     }
@@ -230,7 +244,7 @@ impl Sm9 {
         m: &[u8],
     ) -> Signature {
         let uspk = UserSignaturePrivateKey::from_pem(user_signature_privte_key_pem)
-            .expect("read UserSignaturePrivateKey error");
+            .expect("from_pem UserSignaturePrivateKey error");
         assert!(uspk.is_ok());
         let mspk = MasterSignaturePublicKey::from_pem(master_signature_public_key_pem)
             .expect("MasterSignaturePublicKey from_pem error!");

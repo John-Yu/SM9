@@ -8,7 +8,7 @@ Add the `sm9` crate to your dependencies in `Cargo.toml`
 
 ```toml
 [dependencies]
-sm9 = "0.2.3"
+sm9 = "0.2.5"
 ```
 
 ### Examples
@@ -27,6 +27,20 @@ sm9 = "0.2.3"
     println!("{:02X?}", msg);
     assert_eq!(msg.len(), txt.len());
     assert_eq!(txt, msg.as_slice());
+
+    use std::fs;    
+    let master_public_key =
+        fs::read_to_string("master_public_key.pem").expect("read master_public_key.pem error");
+    let m = Sm9::encrypt2(&master_public_key, usr_id, txt);
+    println!("{:02X?}", m);
+
+    let bob_private_key =
+        fs::read_to_string("bob_private_key.pem").expect("read bob_private_key.pem error");
+    let msg = Sm9::decrypt2(&bob_private_key, usr_id, m).expect("decrypt error");
+    println!("{:02X?}", msg);
+    assert_eq!(msg.len(), txt.len());
+    assert_eq!(txt, msg.as_slice());
+
 ```
 
 (See `signature.rs` for the full example.)
@@ -50,6 +64,19 @@ sm9 = "0.2.3"
         m,
         &sig
     ));
+    use std::fs;
+    let master_signature_public_key = fs::read_to_string("master_signature_public_key.pem")
+        .expect("read master_signature_public_key.pem error");
+    let alice_signature_private_key = fs::read_to_string("alice_signature_private_key.pem")
+        .expect("read alice_signature_private_key.pem error");
+    let sig = Sm9::sign2(
+        &master_signature_public_key,
+        &alice_signature_private_key,
+        m,
+    );
+
+    assert!(Sm9::verify2(&master_signature_public_key, user_id, m, &sig));
+
 ```
 
 ## License
@@ -61,7 +88,7 @@ Licensed under either of
 
 at your option.
 
-Copyright 2023 [John-Yu](https://github.com/John-Yu).
+Copyright 2024 [John-Yu](https://github.com/John-Yu).
 
 ### Authors
 
