@@ -29,19 +29,24 @@ const SM9_HID_ENC: u8 = 3;
 
 // Create alias for HMAC-Sm3
 type HmacSm3 = Hmac<Sm3>;
+/// SM9 signature serialized as bytes.
+pub type SignatureBytes = [u8; Signature::BYTE_SIZE];
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 /// SM9 Signature.
 pub struct Signature(
     // (h, s)
-    pub(crate) [u8; 32 + 65],
+    pub(crate) [u8; Signature::BYTE_SIZE],
 );
 impl Signature {
-    pub fn new(h: &[u8], s: &[u8]) -> Option<Signature> {
+    /// Size of an encoded SM9 signature in bytes.
+    pub const BYTE_SIZE: usize = 32 + 65;
+
+    pub fn new(h: &[u8], s: &[u8]) -> Option<Self> {
         if h.len() != 32 || s.len() != 65 {
             None
         } else {
-            let mut sig = Signature([0u8; 32 + 65]);
+            let mut sig = Signature([0u8; Self::BYTE_SIZE]);
             sig.0[..32].copy_from_slice(h);
             sig.0[32..].copy_from_slice(s);
             Some(sig)
@@ -53,12 +58,74 @@ impl Signature {
     pub fn s_as_ref(&self) -> &[u8] {
         self.0[32..].as_ref()
     }
+    /// Parse a SM9 signature from a byte array.
+    pub fn from_bytes(bytes: &SignatureBytes) -> Option<Self> {
+        let (h, s) = bytes.split_at(32);
+
+        Self::new(h, s)
+    }
+    /// Parse an SM9 signature from a byte slice.
+    pub fn from_slice(bytes: &[u8]) -> signature::Result<Self> {
+        SignatureBytes::try_from(bytes)
+            .map_err(|_| signature::Error::new())?
+            .try_into()
+    }
+
+    /// Serialize SM9 signature as bytes.
+    pub fn to_bytes(&self) -> SignatureBytes {
+        let mut ret = [0u8; Self::BYTE_SIZE];
+        ret.copy_from_slice(self.as_ref());
+
+        ret
+    }
+    /// Convert SM9 signature into a byte vector.
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.0.to_vec()
+    }
 }
+
 impl AsRef<[u8]> for Signature {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
     }
 }
+
+impl From<Signature> for SignatureBytes {
+    fn from(signature: Signature) -> SignatureBytes {
+        signature.to_bytes()
+    }
+}
+
+impl From<&Signature> for SignatureBytes {
+    fn from(signature: &Signature) -> SignatureBytes {
+        signature.to_bytes()
+    }
+}
+
+impl TryFrom<SignatureBytes> for Signature {
+    type Error = signature::Error;
+
+    fn try_from(signature: SignatureBytes) -> signature::Result<Signature> {
+        Signature::from_bytes(&signature).ok_or(signature::Error::new())
+    }
+}
+
+impl TryFrom<&SignatureBytes> for Signature {
+    type Error = signature::Error;
+
+    fn try_from(signature: &SignatureBytes) -> signature::Result<Signature> {
+        Signature::from_bytes(signature).ok_or(signature::Error::new())
+    }
+}
+
+impl TryFrom<&[u8]> for Signature {
+    type Error = signature::Error;
+
+    fn try_from(bytes: &[u8]) -> signature::Result<Signature> {
+        Signature::from_slice(bytes)
+    }
+}
+
 /// SM9 identity-based cryptographic
 pub struct Sm9;
 
