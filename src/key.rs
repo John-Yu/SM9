@@ -11,6 +11,7 @@ use sec1::{
 };
 use sm9_core::{fast_pairing, Group, G1, G2};
 use std::path::Path;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::*;
 
@@ -19,7 +20,7 @@ pub type EncodedPoint = sec1::EncodedPoint<U32>;
 
 macro_rules! key_impl {
     ($name:ident) => {
-        #[derive(Clone, Debug, Default, Eq, PartialEq)]
+        #[derive(Clone, Debug, Default, Eq, PartialEq, ZeroizeOnDrop)]
         pub struct $name(Vec<u8>);
         impl $name {
             pub(crate) fn new(private_key: &[u8]) -> Self {
@@ -51,6 +52,12 @@ macro_rules! key_impl {
                 Ok(Self::new(key.private_key))
             }
         }
+
+        impl Zeroize for $name {
+            fn zeroize(&mut self) {
+                self.0.zeroize()
+            }
+        }
     };
 }
 
@@ -80,8 +87,7 @@ impl EncodeValue for PrivateKey<'_> {
 
     fn encode_value(&self, writer: &mut impl Writer) -> der::Result<()> {
         VERSION.encode(writer)?;
-        OctetStringRef::new(self.private_key)?.encode(writer)?;
-        Ok(())
+        OctetStringRef::new(self.private_key)?.encode(writer)
     }
 }
 impl<'a> Sequence<'a> for PrivateKey<'a> {}

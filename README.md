@@ -8,7 +8,7 @@ Add the `sm9` crate to your dependencies in `Cargo.toml`
 
 ```toml
 [dependencies]
-sm9 = "0.2.5"
+sm9 = "0.3.0"
 ```
 
 ### Examples
@@ -17,7 +17,7 @@ sm9 = "0.2.5"
 
 ```rust
     use sm9::*;
-    
+
     let usr_id = b"Bob";
     let txt = b"Chinese IBE standard";
     let m = Sm9::encrypt("master_public_key.pem", usr_id, txt);
@@ -28,7 +28,7 @@ sm9 = "0.2.5"
     assert_eq!(msg.len(), txt.len());
     assert_eq!(txt, msg.as_slice());
 
-    use std::fs;    
+    use std::fs;
     let master_public_key =
         fs::read_to_string("master_public_key.pem").expect("read master_public_key.pem error");
     let m = Sm9::encrypt2(&master_public_key, usr_id, txt);
@@ -47,7 +47,7 @@ sm9 = "0.2.5"
 
 ```rust
     use sm9::*;
-    
+
     let m = b"Chinese IBS standard";
     let user_id = b"Alice";
     let sig = Sm9::sign(

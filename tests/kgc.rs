@@ -30,6 +30,15 @@ fn generate_bob_privte_key_to_pem() {
     let user_id = b"Bob";
     Sm9::generate_user_private_key_to_pem("master_private_key.pem", user_id, "bob_private_key.pem");
 }
+#[test]
+fn generate_alice_privte_key_to_pem() {
+    let user_id = b"Alice";
+    Sm9::generate_user_private_key_to_pem(
+        "master_private_key.pem",
+        user_id,
+        "alice_private_key.pem",
+    );
+}
 
 //----------------------------------------------------------------signature
 #[test]
@@ -64,5 +73,44 @@ fn generate_alice_signature_private_key_to_pem() {
         "master_signature_private_key.pem",
         user_id,
         "alice_signature_private_key.pem",
+    );
+}
+
+//----------------------------------------------------------------key exchange
+// test data follow "SM9 identity-based cryptographic algorithms"
+// Part 5: Parameter definition
+// Annex B: Example of key exchange protocol
+#[test]
+fn generate_master_exchange_private_key_to_pem() {
+    // master signature private key
+    let ke = Fn::from_slice(&hex!(
+        "0002E65B 0762D042 F51F0D23 542B13ED 8CFA2E9A 0E720636 1E013A28 3905E31F"
+    ))
+    .unwrap();
+    Sm9::generate_master_private_key_to_pem(&ke, "master_exchange_private_key.pem");
+}
+#[test]
+fn generate_master_exchange_public_key_to_pem() {
+    Sm9::generate_master_public_key_to_pem(
+        "master_exchange_private_key.pem",
+        "master_exchange_public_key.pem",
+    );
+}
+#[test]
+fn generate_alice_exchange_private_key_to_pem() {
+    let user_id = b"Alice";
+    Sm9::generate_user_private_key_to_pem(
+        "master_exchange_private_key.pem",
+        user_id,
+        "alice_exchange_private_key.pem",
+    );
+}
+#[test]
+fn generate_bob_exchange_private_key_to_pem() {
+    let user_id = b"Bob";
+    Sm9::generate_user_private_key_to_pem(
+        "master_exchange_private_key.pem",
+        user_id,
+        "bob_exchange_private_key.pem",
     );
 }

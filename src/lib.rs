@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 mod encapsulating;
+pub mod exchanging;
 mod key;
 mod signing;
 mod verifying;
@@ -18,6 +19,7 @@ use crate::signing::SigningKey;
 use crate::verifying::VerifyingKey;
 
 pub use crate::encapsulating::Sm9EncappedKey;
+pub use crate::exchanging::{ComfirmableSecret, EphemeralSecret, KeyExchanger};
 pub use crate::key::{EncodeKey, MasterPublicKey, UserPrivateKey};
 pub use kem::{Decapsulator, EncappedKey, Encapsulator};
 /// Fn is a prime field with n elements
@@ -301,7 +303,8 @@ impl Sm9 {
         let mspk = MasterSignaturePublicKey::read_pem_file(master_signature_public_key_file)
             .expect("MasterSignaturePublicKey read_pem_file error!");
         assert!(mspk.is_ok());
-        let sign_key = SigningKey::new(&uspk, &mspk).unwrap();
+        let sign_key = SigningKey::new(&uspk, &mspk)
+            .expect("UserSignaturePrivateKey or MasterSignaturePublicKey has something wrong!");
         sign_key.sign(m)
     }
     // issues#1, use the content of a pem file as  parameter
@@ -316,7 +319,8 @@ impl Sm9 {
         let mspk = MasterSignaturePublicKey::from_pem(master_signature_public_key_pem)
             .expect("MasterSignaturePublicKey from_pem error!");
         assert!(mspk.is_ok());
-        let sign_key = SigningKey::new(&uspk, &mspk).unwrap();
+        let sign_key = SigningKey::new(&uspk, &mspk)
+            .expect("UserSignaturePrivateKey or MasterSignaturePublicKey has something wrong!");
         sign_key.sign(m)
     }
     /// verify, difined in "SM9 identity-based cryptographic algorithms"
@@ -331,7 +335,8 @@ impl Sm9 {
         let mspk = MasterSignaturePublicKey::read_pem_file(master_signature_public_key_file)
             .expect("MasterSignaturePublicKey read_pem_file error!");
         assert!(mspk.is_ok());
-        let verify_key = VerifyingKey::new(user_id, &mspk).unwrap();
+        let verify_key = VerifyingKey::new(user_id, &mspk)
+            .expect("MasterSignaturePublicKey has something wrong!");
         verify_key.verify(m, sig).is_ok()
     }
     // issues#1, use the content of a pem file as  parameter
@@ -344,7 +349,8 @@ impl Sm9 {
         let mspk = MasterSignaturePublicKey::from_pem(master_signature_public_key_pem)
             .expect("MasterSignaturePublicKey from_pem error!");
         assert!(mspk.is_ok());
-        let verify_key = VerifyingKey::new(user_id, &mspk).unwrap();
+        let verify_key = VerifyingKey::new(user_id, &mspk)
+            .expect("MasterSignaturePublicKey has something wrong!");
         verify_key.verify(m, sig).is_ok()
     }
 }
