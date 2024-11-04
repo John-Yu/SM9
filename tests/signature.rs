@@ -36,11 +36,16 @@ fn test_signature_verify() {
     println!("{:02X?}", sig.h_as_ref());
     println!("{:02X?}", sig.s_as_ref());
 
+    //Verify
+    let mut bytes = Vec::<u8>::new();
+    bytes.extend_from_slice(sig.h_as_ref());
+    bytes.extend_from_slice(sig.s_as_ref());
+    let sig_rev = Signature::from_slice(bytes.as_ref()).unwrap();
     assert!(Sm9::verify(
         "master_signature_public_key.pem",
         user_id,
         m,
-        &sig
+        &sig_rev
     ));
 }
 #[test]

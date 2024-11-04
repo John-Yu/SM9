@@ -40,6 +40,11 @@ pub struct Signature(
     // (h, s)
     pub(crate) [u8; Signature::BYTE_SIZE],
 );
+impl Default for Signature {
+    fn default() -> Self {
+        Self([0u8; Signature::BYTE_SIZE])
+    }
+}
 impl Signature {
     /// Size of an encoded SM9 signature in bytes.
     pub const BYTE_SIZE: usize = 32 + 65;
@@ -48,7 +53,7 @@ impl Signature {
         if h.len() != 32 || s.len() != 65 {
             None
         } else {
-            let mut sig = Signature([0u8; Self::BYTE_SIZE]);
+            let mut sig = Signature::default();
             sig.0[..32].copy_from_slice(h);
             sig.0[32..].copy_from_slice(s);
             Some(sig)
@@ -373,7 +378,6 @@ mod tests {
         z.push(hid);
         let a = Sm9::hash_1(z.as_slice()).unwrap();
         let ex = hex!("9CB1F628 8CE0E510 43CE7234 4582FFC3 01E0A812 A7F5F200 4B85547A 24B82716");
-        println!("{:?}", a);
         assert_eq!(a.to_slice(), ex);
     }
     #[test]
@@ -399,7 +403,6 @@ mod tests {
         );
         let k = hex!("4FF5CF86 D2AD40C8 F4BAC98D 76ABDBDE 0C0E2F0A 829D3F91 1EF5B2BC E0695480");
         let d = Sm9::kdf(&r0, 32).unwrap();
-        println!("{:02X?}", d);
         assert_eq!(k, d.as_slice())
     }
     #[test]
@@ -408,7 +411,6 @@ mod tests {
     // Annex C: example of key encapsulation mechanism
     fn test_bob_privte_key_from_pem() {
         let a = UserPrivateKey::read_pem_file("bob_private_key.pem").unwrap();
-        println!("{:02X?}", a);
         let de = a.to_g2().expect("UserPrivateKey error");
         let b = hex!(
             "94736ACD 2C8C8796 CC4785E9 38301A13 9A059D35 37B64141 40B2D31E ECF41683"
@@ -416,7 +418,6 @@ mod tests {
             "7AA5E475 70DA7600 CD760A0C F7BEAF71 C447F384 4753FE74 FA7BA92C A7D3B55F"
             "27538A62 E7F7BFB5 1DCE0870 4796D94C 9D56734F 119EA447 32B50E31 CDEB75C1"
         );
-        println!("{:02X?}", de);
         assert_eq!(de.to_slice(), b);
     }
     #[test]
@@ -425,7 +426,6 @@ mod tests {
     // Annex C: example of key encapsulation mechanism
     fn test_master_public_key_from_pem() {
         let a = MasterPublicKey::read_pem_file("master_public_key.pem").unwrap();
-        println!("{:02X?}", a);
         let pube = a.to_g1().expect("MasterPublicKey error");
         let b = hex!(
             "787ED7B8 A51F3AB8 4E0A6600 3F32DA5C 720B17EC A7137D39 ABC66E3C 80A892FF"
@@ -440,7 +440,6 @@ mod tests {
     fn test_master_private_key_from_pem() {
         let a = MasterPrivateKey::read_pem_file("master_private_key.pem")
             .expect("MasterPrivateKey read_pem_file error!");
-        println!("{:02X?}", a);
         assert_eq!(
             a.as_slice(),
             &hex!("0001EDEE 3778F441 F8DEA3D9 FA0ACC4E 07EE36C9 3F9A0861 8AF4AD85 CEDE1C22")
@@ -453,7 +452,6 @@ mod tests {
     fn test_master_signature_private_key() {
         let a = MasterPrivateKey::read_pem_file("master_signature_private_key.pem")
             .expect("MasterPrivateKey read_pem_file error!");
-        println!("{:02X?}", a);
         assert_eq!(
             a.as_slice(),
             &hex!("000130E7 8459D785 45CB54C5 87E02CF4 80CE0B66 340F319F 348A1D5B 1F2DC5F4")
@@ -466,7 +464,6 @@ mod tests {
     fn test_master_signature_public_key() {
         let a = MasterSignaturePublicKey::read_pem_file("master_signature_public_key.pem")
             .expect("MasterSignaturePublicKey read_pem_file error!");
-        println!("{:02X?}", a);
         let pub_s = a.to_g2().expect("MasterSignaturePublicKey error");
         let b = hex!(
             "9F64080B 3084F733 E48AFF4B 41B56501 1CE0711C 5E392CFB 0AB1B679 1B94C408"
@@ -474,7 +471,6 @@ mod tests {
             "69850938 ABEA0112 B57329F4 47E3A0CB AD3E2FDB 1A77F335 E89E1408 D0EF1C25"
             "41E00A53 DDA532DA 1A7CE027 B7A46F74 1006E85F 5CDFF073 0E75C05F B4E3216D"
         );
-        println!("{:02X?}", pub_s);
         assert_eq!(pub_s.to_slice(), b);
     }
     #[test]
@@ -484,13 +480,11 @@ mod tests {
     fn test_alice_signature_private_key() {
         let a = UserSignaturePrivateKey::read_pem_file("alice_signature_private_key.pem")
             .expect("UserSignaturePrivateKey read_pem_file error!");
-        println!("{:02X?}", a);
         let pub_s = a.to_g1().expect("UserSignaturePrivateKey error");
         let b = hex!(
             "A5702F05 CF131530 5E2D6EB6 4B0DEB92 3DB1A0BC F0CAFF90 523AC875 4AA69820"
             "78559A84 4411F982 5C109F5E E3F52D72 0DD01785 392A727B B1556952 B2B013D3"
         );
-        println!("{:02X?}", pub_s);
         assert_eq!(pub_s.to_slice(), b);
     }
     #[test]
@@ -502,8 +496,6 @@ mod tests {
         pk_recip[..3].copy_from_slice(usr_id);
         let mut rng = OsRng;
         let (ek, ss1) = encapper.try_encap(&mut rng, &pk_recip).unwrap();
-        println!("Sm9EncappedKey:{:02X?}", ek.as_ref());
-        println!("Sm9SharedSecret:{:02X?}", ss1.as_bytes());
         let mut z = Vec::<u8>::new();
         z.extend_from_slice(ek.as_ref());
         z.extend_from_slice(ss1.as_bytes());

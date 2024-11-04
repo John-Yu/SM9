@@ -8,11 +8,12 @@ Add the `sm9` crate to your dependencies in `Cargo.toml`
 
 ```toml
 [dependencies]
-sm9 = "0.3.0"
+sm9 = "0.3.2"
 ```
 
 ### Examples
 
+#### Example1: Encrypt
 (See `encryption.rs` for the full example.)
 
 ```rust
@@ -43,11 +44,13 @@ sm9 = "0.3.0"
 
 ```
 
+#### Example2: Signature
 (See `signature.rs` for the full example.)
 
 ```rust
     use sm9::*;
-
+    
+    //Sign
     let m = b"Chinese IBS standard";
     let user_id = b"Alice";
     let sig = Sm9::sign(
@@ -58,12 +61,18 @@ sm9 = "0.3.0"
     println!("{:02X?}", sig.h_as_ref());
     println!("{:02X?}", sig.s_as_ref());
 
+    //Verify
+    let mut bytes = Vec::<u8>::new();
+    bytes.extend_from_slice(sig.h_as_ref());
+    bytes.extend_from_slice(sig.s_as_ref());
+    let sig_rev = Signature::from_slice(bytes.as_ref()).unwrap();
     assert!(Sm9::verify(
         "master_signature_public_key.pem",
         user_id,
         m,
-        &sig
+        &sig_rev
     ));
+
     use std::fs;
     let master_signature_public_key = fs::read_to_string("master_signature_public_key.pem")
         .expect("read master_signature_public_key.pem error");
@@ -79,6 +88,50 @@ sm9 = "0.3.0"
 
 ```
 
+#### Example3: Key Exchange 
+(See `exchange.rs` for the full example.)
+
+```rust
+use sm9::*;
+    let mpk = MasterPublicKey::read_pem_file("master_exchange_public_key.pem")
+        .expect("read master_public_key_file error");
+    let alice_id = b"Alice";
+    let alice_key = UserPrivateKey::read_pem_file("alice_exchange_private_key.pem")
+        .expect("read user_privte_key_file error");
+    let bob_id = b"Bob";
+    let bob_key = UserPrivateKey::read_pem_file("bob_exchange_private_key.pem")
+        .expect("read user_privte_key_file error");
+    // the initiator A
+    let mut initiator = KeyExchanger::new(alice_id, &alice_key, &mpk, true).unwrap();
+    // the responder B
+    let mut responder = KeyExchanger::new(bob_id, &bob_key, &mpk, false).unwrap();
+    // A Step 3: compute 𝑅𝐴
+    let ra = initiator.generate_ephemeral_secret(bob_id).unwrap();
+    // A Step 4: send 𝑅𝐴 to B
+
+    // B Step 3: compute 𝑅B
+    let rb = responder.generate_ephemeral_secret(alice_id).unwrap();
+    //  B Step 4: send 𝑅B to A
+    // A compute shared_secret use received rb
+    let rb_received = EphemeralSecret::from_slice(rb.as_slice());
+    let ska = initiator.generate_shared_secret(&rb_received).unwrap();
+    // B compute shared_secret use received ra
+    let ra_received = EphemeralSecret::from_slice(ra.as_slice());
+    let skb = responder.generate_shared_secret(&ra_received).unwrap();
+    assert_eq!(ska, skb);
+    // B Step 6: (optional) compute SB, and send it to A
+    let sb = responder.generate_comfirmable_secret().unwrap();
+    // A (optional) confirmation from B to A
+    let sb_received = ComfirmableSecret::from_slice(sb.as_slice());
+    let confirmation_a = initiator.comfirm(&sb_received).unwrap();
+    // A Step 8: (optional) compute 𝑆𝐴, and send it to B,
+    let sa = initiator.generate_comfirmable_secret().unwrap();
+    // B (optional) confirmation from A to B
+    let sa_received = ComfirmableSecret::from_slice(sa.as_slice());
+    let confirmation_b = responder.comfirm(&sa_received).unwrap();
+    assert!(confirmation_a);
+    assert!(confirmation_b);
+```
 ## License
 
 Licensed under either of

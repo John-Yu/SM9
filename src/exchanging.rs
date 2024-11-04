@@ -106,9 +106,7 @@ impl KeyExchanger {
         let mut z = Vec::<u8>::new();
         z.extend_from_slice(peer_id);
         z.push(SM9_HID_ENC);
-        println!("𝐼𝐷𝐵∥ℎ𝑖𝑑 {:02X?}", z);
         let h1 = Sm9::hash_1(z.as_slice()).unwrap();
-        println!("{:02X?}", h1);
         let g1 = G1::one() * h1;
         let pube = self.public_key.to_g1().ok_or(Error).unwrap();
         let q = g1 + pube;
@@ -132,7 +130,6 @@ impl KeyExchanger {
         self.r = r;
         //Step 3: compute 𝑅𝐴=[𝑟𝐴]𝑄𝐵
         let ra = (r * q).to_slice();
-        println!("ra: {:02X?}", ra);
         self.ra = EphemeralSecret::from_slice(ra.as_ref());
         Ok(self.ra.clone())
     }
@@ -154,10 +151,7 @@ impl KeyExchanger {
                 z.extend(&self.peer_id);
                 z.extend_from_slice(self.ra.as_slice());
                 z.extend_from_slice(self.rb.as_slice());
-                z.extend_from_slice(g1.to_slice().as_ref());
-                z.extend_from_slice(g2.to_slice().as_ref());
-                z.extend_from_slice(g3.to_slice().as_ref());
-
+                z.extend_from_slice(&[g1.to_slice(), g2.to_slice(), g3.to_slice()].concat());
                 sk = Sm9::kdf(z.as_ref(), 16).expect("klen maybe error");
                 //𝑆1 = 𝐻𝑣(0x82 ∥ 𝑔1′∥ 𝐻𝑣(𝑔2′∥ 𝑔3′∥ 𝐼𝐷𝐴 ∥ 𝐼𝐷𝐵 ∥𝑅𝐴 ∥ 𝑅𝐵))
                 let mut u = Vec::<u8>::new();
@@ -177,17 +171,13 @@ impl KeyExchanger {
                 sm3.update([0x82u8]);
                 sm3.update(v.clone());
                 let ha = sm3.finalize();
-                println!("s1: {:02X?}", ha.as_slice());
                 self.s1 = ComfirmableSecret::from_slice(ha.as_slice());
-                //𝑆1 = 𝐻𝑣(0x83 ∥ 𝑔1′∥ 𝐻𝑣(𝑔2′∥ 𝑔3′∥ 𝐼𝐷𝐴 ∥ 𝐼𝐷𝐵 ∥𝑅𝐴 ∥ 𝑅𝐵))
+                //𝑆2 = 𝐻𝑣(0x83 ∥ 𝑔1′∥ 𝐻𝑣(𝑔2′∥ 𝑔3′∥ 𝐼𝐷𝐴 ∥ 𝐼𝐷𝐵 ∥𝑅𝐴 ∥ 𝑅𝐵))
                 let mut sm3 = Sm3::new();
                 sm3.update([0x83u8]);
                 sm3.update(v);
                 let ha = sm3.finalize();
-                println!("s2: {:02X?}", ha.as_slice());
                 self.s2 = ComfirmableSecret::from_slice(ha.as_slice());
-
-                println!("sk: {:02X?}", sk);
             } else {
                 self.rb = EphemeralSecret::new(es.0);
                 let rb = G1::from_slice(self.rb.as_slice()).unwrap();
@@ -200,9 +190,7 @@ impl KeyExchanger {
                 z.extend(&self.user_id);
                 z.extend_from_slice(self.rb.as_slice());
                 z.extend_from_slice(self.ra.as_slice());
-                z.extend_from_slice(g1.to_slice().as_ref());
-                z.extend_from_slice(g2.to_slice().as_ref());
-                z.extend_from_slice(g3.to_slice().as_ref());
+                z.extend_from_slice(&[g1.to_slice(), g2.to_slice(), g3.to_slice()].concat());
 
                 sk = Sm9::kdf(z.as_ref(), 16).expect("klen maybe error");
                 //𝑆1 = 𝐻𝑣(0x82 ∥ 𝑔1′∥ 𝐻𝑣(𝑔2′∥ 𝑔3′∥ 𝐼𝐷𝐴 ∥ 𝐼𝐷𝐵 ∥𝑅𝐴 ∥ 𝑅𝐵))
@@ -223,23 +211,20 @@ impl KeyExchanger {
                 sm3.update([0x82u8]);
                 sm3.update(v.clone());
                 let ha = sm3.finalize();
-                println!("s1: {:02X?}", ha.as_slice());
                 self.s1 = ComfirmableSecret::from_slice(ha.as_slice());
-                //𝑆1 = 𝐻𝑣(0x83 ∥ 𝑔1′∥ 𝐻𝑣(𝑔2′∥ 𝑔3′∥ 𝐼𝐷𝐴 ∥ 𝐼𝐷𝐵 ∥𝑅𝐴 ∥ 𝑅𝐵))
+                //𝑆2 = 𝐻𝑣(0x83 ∥ 𝑔1′∥ 𝐻𝑣(𝑔2′∥ 𝑔3′∥ 𝐼𝐷𝐴 ∥ 𝐼𝐷𝐵 ∥𝑅𝐴 ∥ 𝑅𝐵))
                 let mut sm3 = Sm3::new();
                 sm3.update([0x83u8]);
                 sm3.update(v);
                 let ha = sm3.finalize();
-                println!("s2: {:02X?}", ha.as_slice());
                 self.s2 = ComfirmableSecret::from_slice(ha.as_slice());
-
-                println!("sk: {:02X?}", sk);
             }
             Ok(SharedSecret::from_slice(sk.as_ref()))
         }
     }
     pub fn generate_comfirmable_secret(&self) -> Result<ComfirmableSecret, Error> {
         if self.s1 == ComfirmableSecret::default() {
+            // call generate_shared_secret first
             Err(Error)
         } else if self.is_initiator {
             Ok(self.s2.clone())
@@ -249,6 +234,7 @@ impl KeyExchanger {
     }
     pub fn comfirm(&self, cs: &ComfirmableSecret) -> Result<bool, Error> {
         if self.s1 == ComfirmableSecret::default() {
+            // call generate_shared_secret first
             Err(Error)
         } else if self.is_initiator {
             Ok(self.s1 == *cs)

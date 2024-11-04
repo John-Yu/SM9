@@ -32,6 +32,7 @@ fn test_key_exchange() {
     // B compute shared_secret use received ra
     let ra_received = EphemeralSecret::from_slice(ra.as_slice());
     let skb = responder.generate_shared_secret(&ra_received).unwrap();
+    assert_eq!(ska, skb);
     // B Step 6: (optional) compute SB, and send it to A
     let sb = responder.generate_comfirmable_secret().unwrap();
     // A (optional) confirmation from B to A
@@ -44,5 +45,4 @@ fn test_key_exchange() {
     let confirmation_b = responder.comfirm(&sa_received).unwrap();
     assert!(confirmation_a);
     assert!(confirmation_b);
-    assert_eq!(ska, skb);
 }
