@@ -2,14 +2,13 @@
 use sec1::{
     consts::U32,
     der::{
-        self,
+        self, Decode, DecodeValue, Document, Encode, EncodeValue, Error, Header, Length, Reader,
+        Result, Sequence, Writer,
         asn1::OctetStringRef,
         pem::{LineEnding, PemLabel},
-        Decode, DecodeValue, Document, Encode, EncodeValue, Error, Header, Length, Reader, Result,
-        Sequence, Writer,
     },
 };
-use sm9_core::{fast_pairing, Group, G1, G2};
+use sm9_core::{G1, G2, Group, fast_pairing};
 use std::path::Path;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -150,9 +149,11 @@ impl MasterPrivateKey {
         let a = pub_e.to_compressed();
         let user_key = MasterPublicKey::new(a.as_ref());
 
-        assert!(user_key
-            .write_pem_file(path, MasterPublicKey::PEM_LABEL, LineEnding::CRLF)
-            .is_ok());
+        assert!(
+            user_key
+                .write_pem_file(path, MasterPublicKey::PEM_LABEL, LineEnding::CRLF)
+                .is_ok()
+        );
     }
     pub(crate) fn generate_user_private_key_to_pem(&self, user_id: &[u8], path: impl AsRef<Path>) {
         // master encryption private key
@@ -167,9 +168,11 @@ impl MasterPrivateKey {
         let de = G2::one() * t2;
         let a = de.to_compressed();
         let user_key = UserPrivateKey::new(a.as_ref());
-        assert!(user_key
-            .write_pem_file(path, UserPrivateKey::PEM_LABEL, LineEnding::CRLF)
-            .is_ok());
+        assert!(
+            user_key
+                .write_pem_file(path, UserPrivateKey::PEM_LABEL, LineEnding::CRLF)
+                .is_ok()
+        );
     }
     // 5.3 Generation of the signature master key and the user's signature private key
     pub(crate) fn generate_master_signature_public_key_to_pem(&self, path: impl AsRef<Path>) {
@@ -181,9 +184,10 @@ impl MasterPrivateKey {
         let a = pub_s.to_compressed();
         let key = MasterSignaturePublicKey::new(a.as_ref());
 
-        assert!(key
-            .write_pem_file(path, MasterSignaturePublicKey::PEM_LABEL, LineEnding::CRLF)
-            .is_ok());
+        assert!(
+            key.write_pem_file(path, MasterSignaturePublicKey::PEM_LABEL, LineEnding::CRLF)
+                .is_ok()
+        );
     }
     // 5.3 Generation of the signature master key and the user's signature private key
     pub(crate) fn generate_user_signature_private_key_to_pem(
@@ -203,9 +207,11 @@ impl MasterPrivateKey {
         let ds = G1::one() * t2;
         let a = ds.to_compressed();
         let user_key = UserSignaturePrivateKey::new(a.as_ref());
-        assert!(user_key
-            .write_pem_file(path, UserSignaturePrivateKey::PEM_LABEL, LineEnding::CRLF)
-            .is_ok());
+        assert!(
+            user_key
+                .write_pem_file(path, UserSignaturePrivateKey::PEM_LABEL, LineEnding::CRLF)
+                .is_ok()
+        );
     }
 }
 
@@ -245,7 +251,7 @@ impl MasterPublicKey {
 
         let mut c;
         let mut k;
-        let rng = &mut thread_rng();
+        let rng = &mut rng();
         loop {
             // A2: rand r in [1, N-1]
             let r = Fn::random(rng);
@@ -452,7 +458,7 @@ impl UserSignaturePrivateKey {
         // A1: Compute the element g = e(P1, Ppub_s)
         let pub_s = msp.to_g2().expect("MasterSignaturePublicKey error");
         let g = fast_pairing(G1::one(), pub_s);
-        let rng = &mut thread_rng();
+        let rng = &mut rng();
         let mut h;
         let mut l;
         loop {

@@ -8,7 +8,7 @@ mod signing;
 mod verifying;
 
 use hmac::{Hmac, Mac};
-use rand::prelude::*;
+use rand::rng;
 use sec1::der::pem::{LineEnding, PemLabel};
 use signature::{Signer, Verifier};
 use sm3::{Digest, Sm3};
@@ -18,10 +18,9 @@ use crate::key::{MasterPrivateKey, MasterSignaturePublicKey, UserSignaturePrivat
 use crate::signing::SigningKey;
 use crate::verifying::VerifyingKey;
 
-pub use crate::encapsulating::Sm9EncappedKey;
+pub use crate::encapsulating::{Decapsulator, EncappedKey, Encapsulator, Sm9EncappedKey};
 pub use crate::exchanging::{ComfirmableSecret, EphemeralSecret, KeyExchanger};
 pub use crate::key::{EncodeKey, MasterPublicKey, UserPrivateKey};
-pub use kem::{Decapsulator, EncappedKey, Encapsulator};
 /// Fn is a prime field with n elements
 /// where n is the order of the cyclic groups 𝔾1, 𝔾2 and 𝔾t
 pub use sm9_core::Fr as Fn;
@@ -208,14 +207,16 @@ impl Sm9 {
         let binding = ke.to_slice();
         let master_private_key = MasterPrivateKey::new(binding.as_ref());
 
-        assert!(master_private_key
-            .write_pem_file(path, MasterPrivateKey::PEM_LABEL, LineEnding::CRLF)
-            .is_ok());
+        assert!(
+            master_private_key
+                .write_pem_file(path, MasterPrivateKey::PEM_LABEL, LineEnding::CRLF)
+                .is_ok()
+        );
     }
     /// generate_random_master_private_key_to_pem file
     pub fn generate_random_master_private_key_to_pem(path: impl AsRef<Path>) {
         // master encryption private key
-        let rng = &mut thread_rng();
+        let rng = &mut rng();
         let ke = Fn::random(rng);
         Self::generate_master_private_key_to_pem(&ke, path);
     }
@@ -362,12 +363,10 @@ impl Sm9 {
 
 #[cfg(test)]
 mod tests {
-    use crate::encapsulating::Sm9EncappedKey;
+    use crate::encapsulating::{Decapsulator, EncappedKey, Encapsulator, Sm9EncappedKey};
 
     use super::*;
     use hex_literal::hex;
-    use kem::{Decapsulator, EncappedKey, Encapsulator};
-    use rand::rngs::OsRng;
 
     #[test]
     fn test_hash1() {
@@ -494,7 +493,7 @@ mod tests {
         let mut pk_recip: <Sm9EncappedKey as EncappedKey>::RecipientPublicKey = [0u8; 128].into();
         let usr_id = b"Bob";
         pk_recip[..3].copy_from_slice(usr_id);
-        let mut rng = OsRng;
+        let mut rng = rng();
         let (ek, ss1) = encapper.try_encap(&mut rng, &pk_recip).unwrap();
         let mut z = Vec::<u8>::new();
         z.extend_from_slice(ek.as_ref());

@@ -7,10 +7,11 @@
 use core::fmt::{Debug, Display};
 
 use crate::*;
-use generic_array::{typenum, ArrayLength, GenericArray};
+use generic_array::{ArrayLength, GenericArray, typenum};
+use rand::rng;
 //use hex_literal::hex;
 use sm3::{Digest, Sm3};
-use sm9_core::{fast_pairing, Group, G1, G2};
+use sm9_core::{G1, G2, Group, fast_pairing};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Represents KEM errors. This is intentionally opaque to avoid leaking information about private
@@ -111,7 +112,7 @@ impl KeyExchanger {
         let pube = self.public_key.to_g1().ok_or(Error).unwrap();
         let q = g1 + pube;
         // Step 2: generate a random number
-        let rng = &mut thread_rng();
+        let rng = &mut rng();
         let r = Fn::random(rng);
         // just for test
         /*
